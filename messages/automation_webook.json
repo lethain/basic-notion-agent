@@ -1,0 +1,111 @@
+{
+  "source": {
+    "type": "automation",
+    "automation_id": "236ac777-210d-808c-9f6c-004ddccebd1e",
+    "action_id": "236ac777-210d-8011-91ae-005ad49ff133",
+    "event_id": "77c151d3-ee4a-487e-9dda-223906bcb641",
+    "attempt": 1
+  },
+  "data": {
+    "object": "page",
+    "id": "23cac777-210d-80a8-a27d-e505f0cdf316",
+    "created_time": "2025-07-26T14:47:00.000Z",
+    "last_edited_time": "2025-07-26T14:48:00.000Z",
+    "created_by": {
+      "object": "user",
+      "id": "65788547-a012-4a93-ac7d-8ca782350184"
+    },
+    "last_edited_by": {
+      "object": "user",
+      "id": "65788547-a012-4a93-ac7d-8ca782350184"
+    },
+    "cover": null,
+    "icon": {
+      "type": "external",
+      "external": {
+        "url": "https:www.notion.soiconsdocument_gray.svg"
+      }
+    },
+    "parent": {
+      "type": "database_id",
+      "database_id": "236ac777-210d-801b-a71e-ccc5d3f313d8"
+    },
+    "archived": false,
+    "in_trash": false,
+    "properties": {
+      "Name": {
+        "id": "title",
+        "type": "title",
+        "title": [
+          {
+            "type": "text",
+            "text": {
+              "content": "Test test test",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "Test test test",
+            "href": null
+          }
+        ]
+      },
+      "Description": {
+        "id": "TQu%7B",
+        "type": "rich_text",
+        "rich_text": [
+          {
+            "type": "text",
+            "text": {
+              "content": "Test",
+              "link": null
+            },
+            "annotations": {
+              "bold": false,
+              "italic": false,
+              "strikethrough": false,
+              "underline": false,
+              "code": false,
+              "color": "default"
+            },
+            "plain_text": "Test",
+            "href": null
+          }
+        ]
+      },
+      "Ready for Review": {
+        "id": "Uj%3Es",
+        "type": "checkbox",
+        "checkbox": true
+      },
+      "Approvers": {
+        "id": "Zcyy",
+        "type": "people",
+        "people": []
+      },
+      "Status": {
+        "id": "P%3EDS",
+        "type": "status",
+        "status": {
+          "id": "hYoj",
+          "name": "Draft",
+          "color": "gray"
+        }
+      },
+      "Created Date": {
+        "id": "_a%3Dd",
+        "type": "date",
+        "date": null
+      }
+    },
+    "url": "https:www.notion.soTest-test-test-23cac777210d80a8a27de505f0cdf316",
+    "public_url": null,
+    "request_id": "0115d9dd-203e-4003-b304-dead337b9eee"
+  }
+}
