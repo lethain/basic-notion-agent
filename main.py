@@ -32,6 +32,7 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
             return json.dumps({"error": "Missing prompt_id parameter", 'event': event})
         
         prompt_page = get_page(prompt_id)
+        prompt_name = prompt_page['name']
         
         # Get changed page ID from request body
         event_body = event.get('body', '')
@@ -50,7 +51,9 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
         openai_response = query_openai(
             system_prompt=prompt_page['markdown'],
             user_prompt=changed_page['markdown'], 
-            model=model
+            model=model,
+            page_id=changed_page_id,
+            commenter_name=prompt_name
         )
         
         result = {
@@ -104,9 +107,14 @@ def get_page(page_id: str) -> Dict[str, Any]:
         start_cursor = data.get('next_cursor')
 
     markdown_content = notion_to_markdown(blocks)
+    page_name = 'Default Agent'
+    lines = markdown_content.split('\n')
+    if len(lines) > 1:
+        page_name = lines[1]
     
     return {
         "page_id": page_id,
+        "name": page_name,
         "markdown": markdown_content
     }
 
@@ -317,7 +325,7 @@ def markdown_to_notion(markdown: str) -> List[Dict[str, Any]]:
     return blocks
 
 
-def notion_comment(block_id: str, comment_markdown: str) -> Dict[str, Any]:
+def notion_comment(block_id: str, comment_markdown: str, commenter_name: str) -> Dict[str, Any]:
     """
     Add a comment to a specific block in Notion.
     
@@ -360,13 +368,16 @@ def notion_comment(block_id: str, comment_markdown: str) -> Dict[str, Any]:
             "block_id": block_id
         },
         "rich_text": rich_text,
-        "display_name": {
+    }
+    if commenter_name:
+        comment_data['display_name'] = {
             "type": "custom",
             "custom": {
-                "name": "Custom Name"
-            },
-        },
-    }
+                "name": commenter_name
+            }
+        }
+
+    
     
     # Make API request
     url = "https://api.notion.com/v1/comments"
@@ -394,7 +405,7 @@ def notion_comment(block_id: str, comment_markdown: str) -> Dict[str, Any]:
         return {"success": False, "error": str(e)}
 
 
-def query_openai(system_prompt: str, user_prompt: str, model: str = 'gpt-4o') -> str:
+def query_openai(system_prompt: str, user_prompt: str, model: str, page_id: str, commenter_name: str) -> str:
     """
     Query OpenAI API with system and user prompts, including function calling capability.
     
@@ -465,7 +476,7 @@ def query_openai(system_prompt: str, user_prompt: str, model: str = 'gpt-4o') ->
                     comment_markdown = function_args.get("comment_markdown")
                     
                     # Call the notion_comment function
-                    comment_result = notion_comment(block_id, comment_markdown)
+                    comment_result = notion_comment(block_id, comment_markdown, commenter_name)
                     
                     # Add the function result to messages
                     messages.append({
@@ -480,8 +491,8 @@ def query_openai(system_prompt: str, user_prompt: str, model: str = 'gpt-4o') ->
                 model=model,
                 messages=messages
             )
-            
-            return final_response.choices[0].message.content
+            notion_comment(page_id, final_response.choices[0].message.content, commenter_name)
+
         else:
             # No function calls, return regular response
             return response_message.content
