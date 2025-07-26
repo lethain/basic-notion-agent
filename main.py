@@ -350,17 +350,7 @@ def notion_comment(block_id: str, comment_markdown: str, commenter_name: str) ->
         raise ValueError("Comment markdown could not be converted to Notion blocks")
     
     # Get rich text from the first block
-    first_block = comment_blocks[0]
-    rich_text = []
-    
-    if first_block.get('type') == 'paragraph':
-        rich_text = first_block.get('paragraph', {}).get('rich_text', [])
-    elif first_block.get('type').startswith('heading_'):
-        block_type = first_block.get('type')
-        rich_text = first_block.get(block_type, {}).get('rich_text', [])
-    else:
-        # For other block types, create simple text rich text
-        rich_text = [{"type": "text", "text": {"content": comment_markdown}}]
+    rich_text = [{"type": "text", "text": {"content": comment_markdown}}]
     
     # Prepare comment data
     comment_data = {
@@ -376,8 +366,6 @@ def notion_comment(block_id: str, comment_markdown: str, commenter_name: str) ->
                 "name": commenter_name
             }
         }
-
-    
     
     # Make API request
     url = "https://api.notion.com/v1/comments"
