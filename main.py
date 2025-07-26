@@ -103,7 +103,7 @@ def get_page(page_id: str) -> Dict[str, Any]:
         has_more = data.get('has_more', False)
         start_cursor = data.get('next_cursor')
 
-    markdown_content = notion_to_markdown(blocks)e
+    markdown_content = notion_to_markdown(blocks)
     
     return {
         "page_id": page_id,
@@ -317,9 +317,86 @@ def markdown_to_notion(markdown: str) -> List[Dict[str, Any]]:
     return blocks
 
 
+def notion_comment(block_id: str, comment_markdown: str) -> Dict[str, Any]:
+    """
+    Add a comment to a specific block in Notion.
+    
+    Args:
+        block_id: The ID of the block to comment on
+        comment_markdown: The comment content in Markdown format
+        
+    Returns:
+        Dictionary with comment creation result
+    """
+    print('notion_comment', block_id, comment_markdown)
+    
+    notion_token = os.environ.get('NOTION_TOKEN')
+    if not notion_token:
+        raise ValueError("NOTION_TOKEN environment variable is required")
+    
+    # Convert markdown to notion rich text format
+    comment_blocks = markdown_to_notion(comment_markdown)
+    
+    # Extract rich text from the first block (comments are single rich text arrays)
+    if not comment_blocks:
+        raise ValueError("Comment markdown could not be converted to Notion blocks")
+    
+    # Get rich text from the first block
+    first_block = comment_blocks[0]
+    rich_text = []
+    
+    if first_block.get('type') == 'paragraph':
+        rich_text = first_block.get('paragraph', {}).get('rich_text', [])
+    elif first_block.get('type').startswith('heading_'):
+        block_type = first_block.get('type')
+        rich_text = first_block.get(block_type, {}).get('rich_text', [])
+    else:
+        # For other block types, create simple text rich text
+        rich_text = [{"type": "text", "text": {"content": comment_markdown}}]
+    
+    # Prepare comment data
+    comment_data = {
+        "parent": {
+            "block_id": block_id
+        },
+        "rich_text": rich_text,
+        "display_name": {
+            "type": "custom",
+            "custom": {
+                "name": "Custom Name"
+            },
+        },
+    }
+    
+    # Make API request
+    url = "https://api.notion.com/v1/comments"
+    req_data = json.dumps(comment_data).encode('utf-8')
+    
+    req = urllib.request.Request(
+        url,
+        data=req_data,
+        method='POST',
+        headers={
+            'Authorization': f'Bearer {notion_token}',
+            'Notion-Version': '2022-06-28',
+            'Content-Type': 'application/json'
+        }
+    )
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            result = json.loads(response.read().decode())
+            return {"success": True, "comment_id": result.get('id'), "result": result}
+    except urllib.error.HTTPError as e:
+        error_body = e.read().decode()
+        return {"success": False, "error": f"HTTP {e.code}: {error_body}"}
+    except Exception as e:
+        return {"success": False, "error": str(e)}
+
+
 def query_openai(system_prompt: str, user_prompt: str, model: str = 'gpt-4o') -> str:
     """
-    Query OpenAI API with system and user prompts.
+    Query OpenAI API with system and user prompts, including function calling capability.
     
     Args:
         system_prompt: System prompt (from prompt page)
@@ -335,16 +412,79 @@ def query_openai(system_prompt: str, user_prompt: str, model: str = 'gpt-4o') ->
     
     client = OpenAI(api_key=openai_api_key)
     
+    # Define the notion_comment tool for OpenAI
+    tools = [
+        {
+            "type": "function",
+            "function": {
+                "name": "notion_comment",
+                "description": "Add a comment to a specific block in the Notion document",
+                "parameters": {
+                    "type": "object",
+                    "properties": {
+                        "block_id": {
+                            "type": "string",
+                            "description": "The ID of the block to comment on (found in the block_id lines in the document)"
+                        },
+                        "comment_markdown": {
+                            "type": "string", 
+                            "description": "The comment content in Markdown format"
+                        }
+                    },
+                    "required": ["block_id", "comment_markdown"]
+                }
+            }
+        }
+    ]
+    
     try:
+        messages = [
+            {"role": "system", "content": system_prompt},
+            {"role": "user", "content": user_prompt}
+        ]
+        
         response = client.chat.completions.create(
             model=model,
-            messages=[
-                {"role": "system", "content": system_prompt},
-                {"role": "user", "content": user_prompt}
-            ]
+            messages=messages,
+            tools=tools,
+            tool_choice="auto"
         )
         
-        return response.choices[0].message.content
+        response_message = response.choices[0].message
+        
+        # Check if the model wants to call functions
+        if response_message.tool_calls:
+            # Process function calls
+            messages.append(response_message)
+            
+            for tool_call in response_message.tool_calls:
+                if tool_call.function.name == "notion_comment":
+                    # Parse function arguments
+                    function_args = json.loads(tool_call.function.arguments)
+                    block_id = function_args.get("block_id")
+                    comment_markdown = function_args.get("comment_markdown")
+                    
+                    # Call the notion_comment function
+                    comment_result = notion_comment(block_id, comment_markdown)
+                    
+                    # Add the function result to messages
+                    messages.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": "notion_comment",
+                        "content": json.dumps(comment_result)
+                    })
+            
+            # Get final response after function calls
+            final_response = client.chat.completions.create(
+                model=model,
+                messages=messages
+            )
+            
+            return final_response.choices[0].message.content
+        else:
+            # No function calls, return regular response
+            return response_message.content
         
     except Exception as e:
         raise Exception(f"OpenAI API error: {str(e)}")
