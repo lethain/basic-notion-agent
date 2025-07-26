@@ -4,6 +4,21 @@ import urllib.request
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
+if __name__ == "__main__":
+    with open('messages/automation_webhook.json', 'r') as fin:
+        data = json.loads(fin.read())
+        event = {
+            'data': data,
+            'queryStringParameters': {
+                'client_token': 'abcd',
+                'prompt_id': 'prompt-id-a',
+            }
+        }
+        context = {}
+        resp = lambda_handler(event, context)
+        print(resp)
+    
+
 
 def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
     """
@@ -24,12 +39,12 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
         if env_client_token:
             provided_token = query_params.get('client_token')
             if not provided_token or provided_token != env_client_token:
-                return json.dumps({"error": "Invalid client token"}, 'event': data})
+                return json.dumps({"error": "Invalid client token", 'event': data})
         
         # Get prompt_id and retrieve prompt page
         prompt_id = query_params.get('prompt_id')
         if not prompt_id:
-            return json.dumps({"error": "Missing prompt_id parameter"}, 'event': data})
+            return json.dumps({"error": "Missing prompt_id parameter", 'event': data})
         
         prompt_page = get_page(prompt_id)
         
