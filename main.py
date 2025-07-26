@@ -4,21 +4,6 @@ import urllib.request
 import urllib.parse
 from typing import Any, Dict, List, Optional
 
-if __name__ == "__main__":
-    with open('messages/automation_webhook.json', 'r') as fin:
-        data = json.loads(fin.read())
-        event = {
-            'data': data,
-            'queryStringParameters': {
-                'client_token': 'abcd',
-                'prompt_id': 'prompt-id-a',
-            }
-        }
-        context = {}
-        resp = lambda_handler(event, context)
-        print(resp)
-    
-
 
 def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
     """
@@ -33,6 +18,8 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
     """
     try:
         query_params = event.get('queryStringParameters', {}) or {}
+
+        print('a')
         
         # Check client token if configured
         env_client_token = os.environ.get('client_token')
@@ -40,17 +27,25 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
             provided_token = query_params.get('client_token')
             if not provided_token or provided_token != env_client_token:
                 return json.dumps({"error": "Invalid client token", 'event': data})
-        
+
+        print('b')
+            
         # Get prompt_id and retrieve prompt page
         prompt_id = query_params.get('prompt_id')
         if not prompt_id:
             return json.dumps({"error": "Missing prompt_id parameter", 'event': data})
+
+        print('c')        
         
         prompt_page = get_page(prompt_id)
+
+        print('d')                
         
         # Get changed page ID from request body
-        request_data = event.get('data', {})
+        request_data = event.get('data', {}).get('data', {})
         changed_page_id = request_data.get('id')
+        print('request_data', request_data)
+        
         if not changed_page_id:
             return json.dumps({"error": "Missing page ID in request data", 'event': data})
 
@@ -105,6 +100,8 @@ def get_page(page_id: str) -> Dict[str, Any]:
                 'Content-Type': 'application/json'
             }
         )
+
+        print('url', url, req.headers)
         
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode())
@@ -325,3 +322,23 @@ def markdown_to_notion(markdown: str) -> List[Dict[str, Any]]:
         i += 1
     
     return blocks
+
+
+if __name__ == "__main__":
+    with open('messages/automation_webhook.json', 'r') as fin:
+        
+        data = json.loads(fin.read())
+        event = {
+            'data': data,
+            'queryStringParameters': {
+                'prompt_id': '236ac777210d80029121fc57a4ad7a0a',
+            }
+        }
+        context = {}
+
+        print('starting')
+        
+        resp = lambda_handler(event, context)
+        print(resp)
+    
+
