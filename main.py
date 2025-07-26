@@ -312,11 +312,16 @@ def markdown_to_notion(markdown: str) -> List[Dict[str, Any]]:
 
 if __name__ == "__main__":
     with open('messages/automation_webhook.json', 'r') as fin:
+        with open('test.json', 'r') as test_in:
+            test_envs = json.loads(test_in.read())
+        
+        for key, val in test_envs.items():
+            os.environ[key] = val
         
         event = {
             'body': fin.read(),
             'queryStringParameters': {
-                'prompt_id': '236ac777210d80029121fc57a4ad7a0a',
+                'prompt_id': test_envs['PROMPT_ID'],
             }
         }
         context = {}
