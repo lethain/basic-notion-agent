@@ -75,12 +75,30 @@ def get_page(page_id: str) -> Dict[str, Any]:
         page_id: The Notion page ID to retrieve
         
     Returns:
-        Dictionary containing page_id and markdown content with block_ids
+        Dictionary containing page_id, title, and markdown content with block_ids
     """
     notion_token = os.environ.get('NOTION_TOKEN')
     if not notion_token:
         raise ValueError("NOTION_TOKEN environment variable is required")
     
+    # First, get the page metadata to extract the title
+    page_url = f"https://api.notion.com/v1/pages/{page_id}"
+    page_req = urllib.request.Request(
+        page_url,
+        headers={
+            'Authorization': f'Bearer {notion_token}',
+            'Notion-Version': '2022-06-28',
+            'Content-Type': 'application/json'
+        }
+    )
+    
+    with urllib.request.urlopen(page_req) as response:
+        page_data = json.loads(response.read().decode())
+    
+    # Extract the title from properties
+    page_title = extract_page_title(page_data.get('properties', {}))
+    
+    # Now get the page blocks
     blocks = []
     start_cursor = None
     has_more = True
@@ -107,14 +125,10 @@ def get_page(page_id: str) -> Dict[str, Any]:
         start_cursor = data.get('next_cursor')
 
     markdown_content = notion_to_markdown(blocks)
-    page_name = 'Default Agent'
-    lines = markdown_content.split('\n')
-    if len(lines) > 1:
-        page_name = lines[1]
     
     return {
         "page_id": page_id,
-        "name": page_name,
+        "name": page_title,
         "markdown": markdown_content
     }
 
@@ -219,6 +233,43 @@ def _extract_rich_text(rich_text: List[Dict[str, Any]]) -> str:
         result.append(content)
     
     return "".join(result)
+
+
+def extract_page_title(properties: Dict[str, Any]) -> str:
+    """
+    Extract the plain text title from Notion page properties.
+    
+    Args:
+        properties: The properties object from a Notion page
+        
+    Returns:
+        Plain text title string
+    """
+    # Look for the title property (usually has id "title" or type "title")
+    for prop_name, prop_data in properties.items():
+        if prop_data.get('type') == 'title':
+            title_array = prop_data.get('title', [])
+            if title_array:
+                # Extract plain text from rich text objects
+                title_parts = []
+                for text_obj in title_array:
+                    title_parts.append(text_obj.get('plain_text', ''))
+                return ''.join(title_parts)
+    
+    # Fallback: look for a property named "Name" or "Title"
+    for prop_name in ['Name', 'Title', 'name', 'title']:
+        if prop_name in properties:
+            prop_data = properties[prop_name]
+            if prop_data.get('type') == 'title':
+                title_array = prop_data.get('title', [])
+                if title_array:
+                    title_parts = []
+                    for text_obj in title_array:
+                        title_parts.append(text_obj.get('plain_text', ''))
+                    return ''.join(title_parts)
+    
+    # Final fallback
+    return 'Untitled'
 
 
 def markdown_to_notion(markdown: str) -> List[Dict[str, Any]]:
