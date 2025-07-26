@@ -124,23 +124,7 @@ def get_page(page_id: str) -> Dict[str, Any]:
         has_more = data.get('has_more', False)
         start_cursor = data.get('next_cursor')
 
-    markdown_content = notion_to_markdown(blocks)
-    
-    # Get comments for the page
-    comments = get_page_comments(page_id, notion_token)
-    
-    # Add comments to markdown if any exist
-    if comments:
-        markdown_content += "\n\n## Comments\n\n"
-        for comment in comments:
-            comment_id = comment.get('id', '')
-            comment_text = _extract_rich_text(comment.get('rich_text', []))
-            created_by = comment.get('created_by', {}).get('id', 'Unknown')
-            created_time = comment.get('created_time', '')
-            
-            markdown_content += f"block_id: {comment_id}\n"
-            markdown_content += f"**Comment by {created_by} at {created_time}:**\n"
-            markdown_content += f"{comment_text}\n\n"
+    markdown_content = notion_to_markdown(blocks, notion_token)
     
     return {
         "page_id": page_id,
@@ -149,15 +133,16 @@ def get_page(page_id: str) -> Dict[str, Any]:
     }
 
 
-def notion_to_markdown(blocks: List[Dict[str, Any]]) -> str:
+def notion_to_markdown(blocks: List[Dict[str, Any]], notion_token: str) -> str:
     """
-    Convert Notion blocks to Markdown format while preserving block IDs.
+    Convert Notion blocks to Markdown format while preserving block IDs and including comments.
     
     Args:
         blocks: List of Notion block objects
+        notion_token: Notion API token for retrieving comments
         
     Returns:
-        Markdown string with block_id annotations
+        Markdown string with block_id annotations and comments
     """
     markdown_lines = []
     
@@ -170,6 +155,8 @@ def notion_to_markdown(blocks: List[Dict[str, Any]]) -> str:
             if content.strip():
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(content)
+                # Add comments for this block
+                _add_block_comments(markdown_lines, block_id, notion_token)
                 markdown_lines.append("")
         
         elif block_type.startswith('heading_'):
@@ -178,6 +165,8 @@ def notion_to_markdown(blocks: List[Dict[str, Any]]) -> str:
             if content.strip():
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(f"{'#' * level} {content}")
+                # Add comments for this block
+                _add_block_comments(markdown_lines, block_id, notion_token)
                 markdown_lines.append("")
         
         elif block_type == 'bulleted_list_item':
@@ -185,6 +174,8 @@ def notion_to_markdown(blocks: List[Dict[str, Any]]) -> str:
             if content.strip():
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(f"- {content}")
+                # Add comments for this block
+                _add_block_comments(markdown_lines, block_id, notion_token)
                 markdown_lines.append("")
         
         elif block_type == 'numbered_list_item':
@@ -192,6 +183,8 @@ def notion_to_markdown(blocks: List[Dict[str, Any]]) -> str:
             if content.strip():
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(f"1. {content}")
+                # Add comments for this block
+                _add_block_comments(markdown_lines, block_id, notion_token)
                 markdown_lines.append("")
         
         elif block_type == 'code':
@@ -203,6 +196,8 @@ def notion_to_markdown(blocks: List[Dict[str, Any]]) -> str:
                 markdown_lines.append(f"```{language}")
                 markdown_lines.append(content)
                 markdown_lines.append("```")
+                # Add comments for this block
+                _add_block_comments(markdown_lines, block_id, notion_token)
                 markdown_lines.append("")
         
         elif block_type == 'quote':
@@ -210,6 +205,8 @@ def notion_to_markdown(blocks: List[Dict[str, Any]]) -> str:
             if content.strip():
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(f"> {content}")
+                # Add comments for this block
+                _add_block_comments(markdown_lines, block_id, notion_token)
                 markdown_lines.append("")
     
     return "\n".join(markdown_lines).strip()
@@ -251,6 +248,74 @@ def _extract_rich_text(rich_text: List[Dict[str, Any]]) -> str:
     return "".join(result)
 
 
+def _add_block_comments(markdown_lines: List[str], block_id: str, notion_token: str) -> None:
+    """
+    Add comments for a specific block to the markdown lines.
+    
+    Args:
+        markdown_lines: List to append comment lines to
+        block_id: The block ID to get comments for
+        notion_token: Notion API token
+    """
+    comments = get_block_comments(block_id, notion_token)
+    
+    for comment in comments:
+        comment_id = comment.get('id', '')
+        comment_text = _extract_rich_text(comment.get('rich_text', []))
+        created_by = comment.get('created_by', {}).get('id', 'Unknown')
+        created_time = comment.get('created_time', '')
+        
+        markdown_lines.append(f"comment block id: {comment_id}")
+        markdown_lines.append(f"**Comment by {created_by} at {created_time}:**")
+        markdown_lines.append(comment_text)
+
+
+def get_block_comments(block_id: str, notion_token: str) -> List[Dict[str, Any]]:
+    """
+    Retrieve all comments associated with a specific Notion block.
+    
+    Args:
+        block_id: The Notion block ID
+        notion_token: The Notion API token
+        
+    Returns:
+        List of comment objects
+    """
+    comments = []
+    start_cursor = None
+    has_more = True
+    
+    while has_more:
+        url = f"https://api.notion.com/v1/comments?block_id={block_id}"
+        if start_cursor:
+            url += f"&start_cursor={start_cursor}"
+        
+        req = urllib.request.Request(
+            url,
+            headers={
+                'Authorization': f'Bearer {notion_token}',
+                'Notion-Version': '2022-06-28'
+            }
+        )
+        
+        try:
+            with urllib.request.urlopen(req) as response:
+                data = json.loads(response.read().decode())
+            
+            comments.extend(data.get('results', []))
+            has_more = data.get('has_more', False)
+            start_cursor = data.get('next_cursor')
+            
+        except urllib.error.HTTPError as e:
+            # If comments API fails (e.g. permissions), return empty list
+            if e.code == 404 or e.code == 403:
+                break
+            else:
+                raise e
+    
+    return comments
+
+
 def extract_page_title(properties: Dict[str, Any]) -> str:
     """
     Extract the plain text title from Notion page properties.
@@ -288,50 +353,6 @@ def extract_page_title(properties: Dict[str, Any]) -> str:
     return 'Untitled'
 
 
-def get_page_comments(page_id: str, notion_token: str) -> List[Dict[str, Any]]:
-    """
-    Retrieve all comments associated with a Notion page.
-    
-    Args:
-        page_id: The Notion page ID
-        notion_token: The Notion API token
-        
-    Returns:
-        List of comment objects
-    """
-    comments = []
-    start_cursor = None
-    has_more = True
-    
-    while has_more:
-        url = f"https://api.notion.com/v1/comments?block_id={page_id}"
-        if start_cursor:
-            url += f"&start_cursor={start_cursor}"
-        
-        req = urllib.request.Request(
-            url,
-            headers={
-                'Authorization': f'Bearer {notion_token}',
-                'Notion-Version': '2022-06-28'
-            }
-        )
-        
-        try:
-            with urllib.request.urlopen(req) as response:
-                data = json.loads(response.read().decode())
-            
-            comments.extend(data.get('results', []))
-            has_more = data.get('has_more', False)
-            start_cursor = data.get('next_cursor')
-            
-        except urllib.error.HTTPError as e:
-            # If comments API fails (e.g. permissions), return empty list
-            if e.code == 404 or e.code == 403:
-                break
-            else:
-                raise e
-    
-    return comments
 
 
 def markdown_to_notion(markdown: str) -> List[Dict[str, Any]]:
