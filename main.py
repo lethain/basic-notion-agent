@@ -3,6 +3,7 @@ import os
 import urllib.request
 import urllib.parse
 from typing import Any, Dict, List, Optional
+from openai import OpenAI
 
 
 def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
@@ -31,8 +32,6 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
             return json.dumps({"error": "Missing prompt_id parameter", 'event': event})
         
         prompt_page = get_page(prompt_id)
-
-        print(prompt_page['markdown'])
         
         # Get changed page ID from request body
         event_body = event.get('body', '')
@@ -43,11 +42,19 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
             return json.dumps({"error": "Missing page ID in request data", 'event': event})
         
         changed_page = get_page(changed_page_id)
-        print(changed_page['markdown'])
+        
+        # Get model from query parameters, default to gpt-4o
+        model = query_params.get('model', 'gpt-4o')
+        
+        # Query OpenAI using prompt page as system prompt and changed page as user prompt
+        openai_response = query_openai(
+            system_prompt=prompt_page['markdown'],
+            user_prompt=changed_page['markdown'], 
+            model=model
+        )
         
         result = {
-            "prompt_page": prompt_page,
-            "changed_page": changed_page,
+            "openai_response": openai_response,
             "request_id": request_data.get('request_id')
         }
         
@@ -95,8 +102,8 @@ def get_page(page_id: str) -> Dict[str, Any]:
         blocks.extend(data.get('results', []))
         has_more = data.get('has_more', False)
         start_cursor = data.get('next_cursor')
-    
-    markdown_content = notion_to_markdown(blocks)
+
+    markdown_content = notion_to_markdown(blocks)e
     
     return {
         "page_id": page_id,
@@ -308,6 +315,39 @@ def markdown_to_notion(markdown: str) -> List[Dict[str, Any]]:
         i += 1
     
     return blocks
+
+
+def query_openai(system_prompt: str, user_prompt: str, model: str = 'gpt-4o') -> str:
+    """
+    Query OpenAI API with system and user prompts.
+    
+    Args:
+        system_prompt: System prompt (from prompt page)
+        user_prompt: User prompt (from changed page)
+        model: OpenAI model to use
+        
+    Returns:
+        OpenAI response text
+    """
+    openai_api_key = os.environ.get('OPENAI_API_KEY')
+    if not openai_api_key:
+        raise ValueError("OPENAI_API_KEY environment variable is required")
+    
+    client = OpenAI(api_key=openai_api_key)
+    
+    try:
+        response = client.chat.completions.create(
+            model=model,
+            messages=[
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt}
+            ]
+        )
+        
+        return response.choices[0].message.content
+        
+    except Exception as e:
+        raise Exception(f"OpenAI API error: {str(e)}")
 
 
 if __name__ == "__main__":
