@@ -18,44 +18,32 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
     """
     try:
         query_params = event.get('queryStringParameters', {}) or {}
-
-        print('a')
-        
         # Check client token if configured
         env_client_token = os.environ.get('client_token')
         if env_client_token:
             provided_token = query_params.get('client_token')
             if not provided_token or provided_token != env_client_token:
-                return json.dumps({"error": "Invalid client token", 'event': data})
-
-        print('b')
+                return json.dumps({"error": "Invalid client token", 'event': event})
             
         # Get prompt_id and retrieve prompt page
         prompt_id = query_params.get('prompt_id')
         if not prompt_id:
-            return json.dumps({"error": "Missing prompt_id parameter", 'event': data})
-
-        print('c')        
+            return json.dumps({"error": "Missing prompt_id parameter", 'event': event})
         
         prompt_page = get_page(prompt_id)
 
-        print('d')                
+        print(prompt_page['markdown'])
         
         # Get changed page ID from request body
-        request_data = event.get('data', {}).get('data', {})
+        event_body = event.get('body', '')
+        request_data = json.loads(event_body).get('data')
         changed_page_id = request_data.get('id')
-        print('request_data', request_data)
         
         if not changed_page_id:
-            return json.dumps({"error": "Missing page ID in request data", 'event': data})
-
-        print({
-            'client_token': env_client_token,
-            'prompt_id': prompt_id,
-            'changed_page_id': changed_page_id,
-        })
+            return json.dumps({"error": "Missing page ID in request data", 'event': event})
         
         changed_page = get_page(changed_page_id)
+        print(changed_page['markdown'])
         
         result = {
             "prompt_page": prompt_page,
@@ -66,7 +54,7 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
         return json.dumps(result)
         
     except Exception as e:
-        return json.dumps({"error": str(e), 'event': data})
+        return json.dumps({"error": str(e), 'event': event})
 
 
 def get_page(page_id: str) -> Dict[str, Any]:
@@ -101,8 +89,6 @@ def get_page(page_id: str) -> Dict[str, Any]:
             }
         )
 
-        print('url', url, req.headers)
-        
         with urllib.request.urlopen(req) as response:
             data = json.loads(response.read().decode())
         
@@ -327,17 +313,13 @@ def markdown_to_notion(markdown: str) -> List[Dict[str, Any]]:
 if __name__ == "__main__":
     with open('messages/automation_webhook.json', 'r') as fin:
         
-        data = json.loads(fin.read())
         event = {
-            'data': data,
+            'body': fin.read(),
             'queryStringParameters': {
                 'prompt_id': '236ac777210d80029121fc57a4ad7a0a',
             }
         }
         context = {}
-
-        print('starting')
-        
         resp = lambda_handler(event, context)
         print(resp)
     
