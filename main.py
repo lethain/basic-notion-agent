@@ -6,7 +6,7 @@ from typing import Any, Dict, List, Optional
 from openai import OpenAI
 
 
-def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
+def lambda_handler(event: Dict[str, Any], context: Dict[str, Any], debug: bool=False) -> str:
     """
     AWS Lambda handler for Notion webhook processing.
     
@@ -33,6 +33,10 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
         
         prompt_page = get_page(prompt_id)
         prompt_name = prompt_page['name']
+
+        if debug:
+            prompt_str = "# " + prompt_name + "\n\n" + prompt_page['markdown']
+            open('prompt.txt', 'w').write(prompt_str)
         
         # Get changed page ID from request body
         event_body = event.get('body', '')
@@ -41,8 +45,13 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any]) -> str:
         
         if not changed_page_id:
             return json.dumps({"error": "Missing page ID in request data", 'event': event})
-        
+
         changed_page = get_page(changed_page_id)
+        changed_name = changed_page['name']
+
+        if debug:
+            changed_str = "# " + changed_name + "\n\n" + changed_page['markdown']
+            open('changed.txt', 'w').write(changed_str)            
         
         # Get model from query parameters, default to gpt-4o
         model = query_params.get('model', 'gpt-4o')
@@ -80,6 +89,9 @@ def get_page(page_id: str) -> Dict[str, Any]:
     notion_token = os.environ.get('NOTION_TOKEN')
     if not notion_token:
         raise ValueError("NOTION_TOKEN environment variable is required")
+    
+    # Initialize user cache for this page retrieval
+    user_cache = {}
     
     # First, get the page metadata to extract the title
     page_url = f"https://api.notion.com/v1/pages/{page_id}"
@@ -124,7 +136,7 @@ def get_page(page_id: str) -> Dict[str, Any]:
         has_more = data.get('has_more', False)
         start_cursor = data.get('next_cursor')
 
-    markdown_content = notion_to_markdown(blocks, notion_token)
+    markdown_content = notion_to_markdown(blocks, notion_token, user_cache)
     
     return {
         "page_id": page_id,
@@ -133,13 +145,14 @@ def get_page(page_id: str) -> Dict[str, Any]:
     }
 
 
-def notion_to_markdown(blocks: List[Dict[str, Any]], notion_token: str) -> str:
+def notion_to_markdown(blocks: List[Dict[str, Any]], notion_token: str, user_cache: Dict[str, Dict[str, Any]]) -> str:
     """
     Convert Notion blocks to Markdown format while preserving block IDs and including comments.
     
     Args:
         blocks: List of Notion block objects
         notion_token: Notion API token for retrieving comments
+        user_cache: Dictionary to cache user information
         
     Returns:
         Markdown string with block_id annotations and comments
@@ -156,7 +169,7 @@ def notion_to_markdown(blocks: List[Dict[str, Any]], notion_token: str) -> str:
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(content)
                 # Add comments for this block
-                _add_block_comments(markdown_lines, block_id, notion_token)
+                _add_block_comments(markdown_lines, block_id, notion_token, user_cache)
                 markdown_lines.append("")
         
         elif block_type.startswith('heading_'):
@@ -166,7 +179,7 @@ def notion_to_markdown(blocks: List[Dict[str, Any]], notion_token: str) -> str:
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(f"{'#' * level} {content}")
                 # Add comments for this block
-                _add_block_comments(markdown_lines, block_id, notion_token)
+                _add_block_comments(markdown_lines, block_id, notion_token, user_cache)
                 markdown_lines.append("")
         
         elif block_type == 'bulleted_list_item':
@@ -175,7 +188,7 @@ def notion_to_markdown(blocks: List[Dict[str, Any]], notion_token: str) -> str:
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(f"- {content}")
                 # Add comments for this block
-                _add_block_comments(markdown_lines, block_id, notion_token)
+                _add_block_comments(markdown_lines, block_id, notion_token, user_cache)
                 markdown_lines.append("")
         
         elif block_type == 'numbered_list_item':
@@ -184,7 +197,7 @@ def notion_to_markdown(blocks: List[Dict[str, Any]], notion_token: str) -> str:
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(f"1. {content}")
                 # Add comments for this block
-                _add_block_comments(markdown_lines, block_id, notion_token)
+                _add_block_comments(markdown_lines, block_id, notion_token, user_cache)
                 markdown_lines.append("")
         
         elif block_type == 'code':
@@ -197,7 +210,7 @@ def notion_to_markdown(blocks: List[Dict[str, Any]], notion_token: str) -> str:
                 markdown_lines.append(content)
                 markdown_lines.append("```")
                 # Add comments for this block
-                _add_block_comments(markdown_lines, block_id, notion_token)
+                _add_block_comments(markdown_lines, block_id, notion_token, user_cache)
                 markdown_lines.append("")
         
         elif block_type == 'quote':
@@ -206,7 +219,7 @@ def notion_to_markdown(blocks: List[Dict[str, Any]], notion_token: str) -> str:
                 markdown_lines.append(f"block_id: {block_id}")
                 markdown_lines.append(f"> {content}")
                 # Add comments for this block
-                _add_block_comments(markdown_lines, block_id, notion_token)
+                _add_block_comments(markdown_lines, block_id, notion_token, user_cache)
                 markdown_lines.append("")
     
     return "\n".join(markdown_lines).strip()
@@ -248,7 +261,72 @@ def _extract_rich_text(rich_text: List[Dict[str, Any]]) -> str:
     return "".join(result)
 
 
-def _add_block_comments(markdown_lines: List[str], block_id: str, notion_token: str) -> None:
+def get_user(user_id: str, notion_token: str, user_cache: Dict[str, Dict[str, Any]]) -> Dict[str, Any]:
+    """
+    Retrieve user information from Notion API with caching.
+    
+    Args:
+        user_id: The Notion user ID
+        notion_token: Notion API token
+        user_cache: Cache to store user information
+        
+    Returns:
+        Dictionary with user information
+    """
+    # Check cache first
+    if user_id in user_cache:
+        return user_cache[user_id]
+    
+    # Fetch from API
+    url = f"https://api.notion.com/v1/users/{user_id}"
+    req = urllib.request.Request(
+        url,
+        headers={
+            'Authorization': f'Bearer {notion_token}',
+            'Notion-Version': '2022-06-28'
+        }
+    )
+    
+    try:
+        with urllib.request.urlopen(req) as response:
+            user_data = json.loads(response.read().decode())
+        
+        # Extract relevant information
+        user_info = {
+            'name': user_data.get('name', 'Unknown User'),
+            'email': '',
+            'id': user_id
+        }
+        
+        # Get email if it's a person type user
+        if user_data.get('type') == 'person' and 'person' in user_data:
+            user_info['email'] = user_data['person'].get('email', '')
+        
+        # Cache the result
+        user_cache[user_id] = user_info
+        return user_info
+        
+    except urllib.error.HTTPError as e:
+        # If user API fails, return basic info
+        fallback_info = {
+            'name': 'Unknown User',
+            'email': '',
+            'id': user_id
+        }
+        user_cache[user_id] = fallback_info
+        return fallback_info
+    except Exception as e:
+        # For any other error, return basic info
+        fallback_info = {
+            'name': 'Unknown User',
+            'email': '',
+            'id': user_id
+        }
+        user_cache[user_id] = fallback_info
+        return fallback_info
+
+
+def _add_block_comments(markdown_lines: List[str], block_id: str, notion_token: str, user_cache: Dict[str, Dict[str, Any]]) -> None:
     """
     Add comments for a specific block to the markdown lines.
     
@@ -256,17 +334,30 @@ def _add_block_comments(markdown_lines: List[str], block_id: str, notion_token: 
         markdown_lines: List to append comment lines to
         block_id: The block ID to get comments for
         notion_token: Notion API token
+        user_cache: Cache for user information
     """
     comments = get_block_comments(block_id, notion_token)
     
     for comment in comments:
         comment_id = comment.get('id', '')
         comment_text = _extract_rich_text(comment.get('rich_text', []))
-        created_by = comment.get('created_by', {}).get('id', 'Unknown')
+        user_id = comment.get('created_by', {}).get('id', '')
         created_time = comment.get('created_time', '')
         
+        # Get user information
+        if user_id:
+            user_info = get_user(user_id, notion_token, user_cache)
+            user_name = user_info['name']
+            user_email = user_info['email']
+            
+            # Format: **Comment by "Real name" "email address" (UserID) at $time:**
+            email_part = f' "{user_email}"' if user_email else ''
+            comment_by = f'**Comment by "{user_name}"{email_part} ({user_id}) at {created_time}:**'
+        else:
+            comment_by = f'**Comment by Unknown User at {created_time}:**'
+        
         markdown_lines.append(f"comment block id: {comment_id}")
-        markdown_lines.append(f"**Comment by {created_by} at {created_time}:**")
+        markdown_lines.append(comment_by)
         markdown_lines.append(comment_text)
 
 
@@ -638,7 +729,7 @@ if __name__ == "__main__":
             }
         }
         context = {}
-        resp = lambda_handler(event, context)
+        resp = lambda_handler(event, context, debug=True)
         print(resp)
     
 
