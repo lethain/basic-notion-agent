@@ -19,7 +19,7 @@ Then ensure these environmental parameters are set in AWS:
 
 
 
-## Testing
+## Testing Locally
 
 To test this functionality, create a copy of
 `test.json.scaffold', name it `test.json`
@@ -32,6 +32,11 @@ This will look like:
         "PROMPT_ID": "page-id-for-your-prompt-page-in-notion",
         "CHANGED_ID": "page-id-for-your-page-to-comment-on-in-notion"
     }
+
+Ensure you have installed openai's client:
+
+    pip install -r requirements.txt
+
 
 Then run:
 
