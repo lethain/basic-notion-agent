@@ -1,0 +1,6 @@
+{
+    "NOTION_TOKEN": "your notion api key",
+    "OPENAI_API_KEY": "your openai api key",
+    "PROMPT_ID": "page id for notion document for your test prompt",
+    "CHANGED_ID": "page id for document to apply prompt against"
+}

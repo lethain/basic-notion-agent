@@ -728,6 +728,8 @@ if __name__ == "__main__":
                 'prompt_id': test_envs['PROMPT_ID'],
             }
         }
+        event['data']['id'] = test_envs['CHANGED_ID']
+        
         context = {}
         resp = lambda_handler(event, context, debug=True)
         print(resp)
