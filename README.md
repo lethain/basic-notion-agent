@@ -17,11 +17,15 @@ Then ensure these environmental parameters are set in AWS:
 * `OPENAI_API_KEY` should be your OpenAI API key
 
 
-
-
 ## Testing Locally
 
-To test this functionality, create a copy of
+For validation, debugging and development purposes, you should
+strongly prefer local development.
+
+Setup a Notion instance with a page to use as a prompt,
+and a page that you want to apply the prompt against.
+
+Create a copy of
 `test.json.scaffold', name it `test.json`
 and fill in the values with your correct values.
 This will look like:
@@ -41,9 +45,6 @@ Ensure you have installed openai's client:
 Then run:
 
     python3 main.py
-
-It uses only standard library values.
-Note that you need a real working Notion instance to call the APIs against.
 
 This will create two local files:
 
