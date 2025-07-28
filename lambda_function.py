@@ -18,37 +18,59 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any], debug: bool=F
         JSON string with processing metadata
     """
     try:
+        input_error = False
+        inputs = {
+            'client_token_required': False
+        }
+
         query_params = event.get('queryStringParameters', {}) or {}
         # Check client token if configured
         env_client_token = os.environ.get('client_token')
         if env_client_token:
             provided_token = query_params.get('client_token')
+            inputs['client_token_required'] = True
+            inputs['provided_token'] = provided_token
             if not provided_token or provided_token != env_client_token:
-                return json.dumps({"error": "Invalid client token", 'event': event})
-            
+                input_error = True
+                inputs['client_token_error'] = 'Invalid client token'
+
+        # toggle for whether to include a top-level page comment
+        include_page_comment = query_params.get('page_comment', True)
+                
         # Get prompt_id and retrieve prompt page
         prompt_id = query_params.get('prompt_id')
+        inputs['prompt_id'] = prompt_id
         if not prompt_id:
-            return json.dumps({"error": "Missing prompt_id parameter", 'event': event})
+            input_error = True
+            inputs['prompt_id_error'] = 'Missing prompt_id parameter'
+
+        changed_page_id = os.environ.get('changed_id')
+        if not changed_page_id:
+            event_body = event.get('body', '')
+            request_data = json.loads(event_body).get('data')
+            changed_page_id = request_data.get('id')
+
+        inputs['changed_page_id'] = changed_page_id            
+        if not changed_page_id:
+            input_error = True
+            inputs['changed_page_id_error'] = "Missing changed_page_id parameter"
+
+        print(inputs)
+        if input_error:
+            return json.loads(inputs, indent=2)
         
         prompt_page = get_page(prompt_id)
         prompt_name = prompt_page['name']
+        print('retrieved prompt page', prompt_id)
 
         if debug:
             prompt_str = "# " + prompt_name + "\n\n" + prompt_page['markdown']
             open('prompt.txt', 'w').write(prompt_str)
         
-        # Get changed page ID from request body
-        event_body = event.get('body', '')
-        request_data = json.loads(event_body).get('data')
-        changed_page_id = request_data.get('id')
-        
-        if not changed_page_id:
-            return json.dumps({"error": "Missing page ID in request data", 'event': event})
-
         changed_page = get_page(changed_page_id)
         changed_name = changed_page['name']
 
+        print('retrieved changed page', changed_page_id)
         if debug:
             changed_str = "# " + changed_name + "\n\n" + changed_page['markdown']
             open('changed.txt', 'w').write(changed_str)            
@@ -57,12 +79,14 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any], debug: bool=F
         model = query_params.get('model', 'gpt-4o')
         
         # Query OpenAI using prompt page as system prompt and changed page as user prompt
+        print('start querying openai')
         openai_response = query_openai(
             system_prompt=prompt_page['markdown'],
             user_prompt=changed_page['markdown'], 
             model=model,
             page_id=changed_page_id,
-            commenter_name=prompt_name
+            commenter_name=prompt_name,
+            include_page_comment=include_page_comment,
         )
         
         result = {
@@ -618,7 +642,7 @@ def notion_comment(block_id: str, comment_markdown: str, commenter_name: str) ->
         return {"success": False, "error": str(e)}
 
 
-def query_openai(system_prompt: str, user_prompt: str, model: str, page_id: str, commenter_name: str) -> str:
+def query_openai(system_prompt: str, user_prompt: str, model: str, page_id: str, commenter_name: str, include_page_comment: bool) -> str:
     """
     Query OpenAI API with system and user prompts, including function calling capability.
     
@@ -704,7 +728,8 @@ def query_openai(system_prompt: str, user_prompt: str, model: str, page_id: str,
                 model=model,
                 messages=messages
             )
-            notion_comment(page_id, final_response.choices[0].message.content, commenter_name)
+            if include_page_comment:
+                notion_comment(page_id, final_response.choices[0].message.content, commenter_name)
 
         else:
             # No function calls, return regular response
@@ -726,10 +751,9 @@ if __name__ == "__main__":
             'body': fin.read(),
             'queryStringParameters': {
                 'prompt_id': test_envs['PROMPT_ID'],
+                'changed_id': test_envs['CHANGED_ID'],
             }
         }
-        event['data']['id'] = test_envs['CHANGED_ID']
-        
         context = {}
         resp = lambda_handler(event, context, debug=True)
         print(resp)

@@ -7,9 +7,9 @@ A very simple agent to use Notion documents as prompts to comment on other Notio
 Create an AWS Lambda and then upload `packaged/agent.zip` or
 build your own version using:
 
-    make
+    make lambda-package
 
-Then upload it to your AWS Lambda.
+Then upload `agent.zip` to your AWS Lambda.
 
 Afterwards, ensure these environmental parameters are set in AWS:
 
@@ -46,7 +46,7 @@ Ensure you have installed openai's client:
 
 Then run:
 
-    python3 main.py
+    python3 lambda_function.py
 
 This will create two local files:
 

@@ -33,6 +33,17 @@ venv-package: clean
 	rm -rf temp_venv
 	@echo "Lambda deployment package created with venv: $(ZIP_NAME)"
 
+# Install dependencies with correct platform for AWS Lambda
+install-lambda:
+	mkdir -p $(BUILD_DIR)
+	pip install -r requirements.txt -t $(BUILD_DIR) --platform linux_x86_64 --implementation cp --python-version 3.11 --only-binary=:all: --upgrade
+
+# Package for Lambda with correct architecture
+lambda-package: clean install-lambda
+	cp lambda_function.py $(BUILD_DIR)/
+	cd $(BUILD_DIR) && zip -r ../$(ZIP_NAME) .
+	@echo "Lambda deployment package created with correct architecture: $(ZIP_NAME)"
+
 # Show package contents
 show:
 	unzip -l $(ZIP_NAME)
@@ -41,9 +52,9 @@ show:
 test-package:
 	@if [ -f $(ZIP_NAME) ]; then \
 		echo "Checking package contents:"; \
-		unzip -l $(ZIP_NAME) | grep -E "(main\.py|openai)"; \
+		unzip -l $(ZIP_NAME) | grep -E "(lambda_function\.py|openai)"; \
 	else \
 		echo "Package $(ZIP_NAME) not found. Run 'make' first."; \
 	fi
 
-.PHONY: all clean install package venv-package show test-package
+.PHONY: all clean install package venv-package install-lambda lambda-package show test-package
