@@ -25,7 +25,7 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any], debug: bool=F
 
         query_params = event.get('queryStringParameters', {}) or {}
         # Check client token if configured
-        env_client_token = os.environ.get('client_token')
+        env_client_token = os.environ.get('CLIENT_TOKEN')
         if env_client_token:
             provided_token = query_params.get('client_token')
             inputs['client_token_required'] = True
@@ -93,10 +93,10 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any], debug: bool=F
             "openai_response": openai_response,
             "request_id": request_data.get('request_id')
         }
-        
         return json.dumps(result)
         
     except Exception as e:
+        print(str(e))
         return json.dumps({"error": str(e), 'event': event})
 
 
