@@ -44,7 +44,7 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any], debug: bool=F
             input_error = True
             inputs['prompt_id_error'] = 'Missing prompt_id parameter'
 
-        changed_page_id = os.environ.get('changed_id')
+        changed_page_id = query_params.get('changed_id')
         if not changed_page_id:
             event_body = event.get('body', '')
             request_data = json.loads(event_body).get('data')

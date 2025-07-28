@@ -18,6 +18,10 @@ Afterwards, ensure these environmental parameters are set in AWS:
 * `NOTION_TOKEN` should be your Notion API api token
 * `OPENAI_API_KEY` should be your OpenAI API key
 
+Also increase the timeout to at least three minutes.
+(It usually won't take that long, but it really just depends
+on size of prompt and changed pages.)
+
 
 ## Testing Locally
 
