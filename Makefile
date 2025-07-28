@@ -20,7 +20,7 @@ install:
 
 # Package everything into a zip file
 package:
-	cp main.py $(BUILD_DIR)/
+	cp lambda_function.py $(BUILD_DIR)/
 	cd $(BUILD_DIR) && zip -r ../$(ZIP_NAME) .
 	@echo "Lambda deployment package created: $(ZIP_NAME)"
 
@@ -28,7 +28,7 @@ package:
 venv-package: clean
 	python3 -m venv temp_venv
 	./temp_venv/bin/pip install -r requirements.txt -t $(BUILD_DIR)
-	cp main.py $(BUILD_DIR)/
+	cp lambda_function.py $(BUILD_DIR)/
 	cd $(BUILD_DIR) && zip -r ../$(ZIP_NAME) .
 	rm -rf temp_venv
 	@echo "Lambda deployment package created with venv: $(ZIP_NAME)"
