@@ -4,12 +4,14 @@ A very simple agent to use Notion documents as prompts to comment on other Notio
 
 ## Deployment
 
-Create an AWS Lambda and then copy `main.py` as the implementation, e.g.
+Create an AWS Lambda and then upload `packaged/agent.zip` or
+build your own version using:
 
-    cat main.py | pbcopy
-    <paste into aws console>
+    make
 
-Then ensure these environmental parameters are set in AWS:
+Then upload it to your AWS Lambda.
+
+Afterwards, ensure these environmental parameters are set in AWS:
 
 * `CLIENT_TOKEN` should be a token you include in your calls to this lambda via
     the `client_id` query parameter
