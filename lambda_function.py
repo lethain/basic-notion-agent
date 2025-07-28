@@ -35,7 +35,11 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any], debug: bool=F
                 inputs['client_token_error'] = 'Invalid client token'
 
         # toggle for whether to include a top-level page comment
-        include_page_comment = query_params.get('page_comment', True)
+        include_page_comment = query_params.get('page_comment')
+        if include_page_comment and include_page_comment in ('false', 'no'):
+            include_page_comment = False
+        else:
+            include_page_comment = True
                 
         # Get prompt_id and retrieve prompt page
         prompt_id = query_params.get('prompt_id')
@@ -75,8 +79,8 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any], debug: bool=F
             changed_str = "# " + changed_name + "\n\n" + changed_page['markdown']
             open('changed.txt', 'w').write(changed_str)            
         
-        # Get model from query parameters, default to gpt-4o
-        model = query_params.get('model', 'gpt-4o')
+        # Get model from query parameters, default to gpt4.1
+        model = query_params.get('model', 'gpt-4.1')
         
         # Query OpenAI using prompt page as system prompt and changed page as user prompt
         print('start querying openai')
@@ -91,7 +95,7 @@ def lambda_handler(event: Dict[str, Any], context: Dict[str, Any], debug: bool=F
         
         result = {
             "openai_response": openai_response,
-            "request_id": request_data.get('request_id')
+            "inputs": inputs,
         }
         return json.dumps(result)
         

@@ -2,7 +2,45 @@
 A very simple agent to use Notion documents as prompts to comment on other Notion documents.
 
 
-## Deployment
+## Configuring Notion
+
+The steps to configuring in Notion are:
+
+1. Create a [Notion integration](https://www.notion.so/profile/integrations).
+    Ensure it has ability to read content, read comments, and insert comments.
+    It should also have the ability to retrieve user information.
+
+    Also update the `Access` tab for your integration to include the workspaces
+    where your Notion pages exist.
+2. Then add an automation to a database in one of the enabled workspaces which
+    sends requests to:
+
+        https://yourawslambda/
+        ?prompt_id=notion-page-for-your-prompt
+        &client_token=a-unique-key
+        &page_comment=false
+        &model=gpt-4.1
+
+    Note that the URL for your lambda won't exist until you finish setting up the agent as described
+    in "Deploying on AWS" below.
+    
+    Only `prompt_id` is required. Explaining them a bit:
+
+    * `prompt_id` is the Notion page id for the prompt that should be used to evaluate the changed page
+    * `client_token` must match the `CLIENT_TOKEN` in the lambda's environment,
+        if not, the request will be rejected.
+        This is a client secret
+    * `page_comment` defaults to true, and determines whether the final reply from the
+        OpenAI model is added as a comment on the page itself. If the value is set to false,
+        then only inline comments will be made
+    * `model` is the OpenAI model string if you want to use different models for different scenarios
+3. You could alternatively avoid the database approach and instead have your agent
+    get webhooks for every change by configuring `Webhook`.
+    It really just depends on the setup you're looking to provide.
+4. Notion should be configuredf at this point.
+
+
+## Deploying on AWS
 
 Create an AWS Lambda and then upload `packaged/agent.zip` or
 build your own version using:
